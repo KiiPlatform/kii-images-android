@@ -1,6 +1,6 @@
 //
 //
-// Copyright 2012 Kii Corporation
+// Copyright 2014 Kii Corporation
 // http://kii.com
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +31,7 @@ public class HelloKii extends Application {
         super.onCreate();
                 
         // initialize the Kii SDK!
+        // Create an Android app at developer.kii.com and enter your own app_id, app_key and backend location here
         Kii.initialize("b05934a0", "318484e25dc7fc27ca254998602baea5", Site.US);
     }
 	

@@ -1,6 +1,6 @@
 //
 //
-// Copyright 2012 Kii Corporation
+// Copyright 2014 Kii Corporation
 // http://kii.com
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +30,6 @@ import android.widget.Toast;
 
 import com.kii.cloud.storage.KiiUser;
 import com.kii.cloud.storage.callback.KiiUserCallBack;
-import com.kii.cloud.storage.exception.app.AppException;
 
 public class LoginActivity extends Activity {
 	

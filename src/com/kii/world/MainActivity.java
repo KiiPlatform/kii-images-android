@@ -1,6 +1,6 @@
 //
 //
-// Copyright 2012 Kii Corporation
+// Copyright 2014 Kii Corporation
 // http://kii.com
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,6 @@ package com.kii.world;
 
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -60,388 +59,424 @@ import com.kii.cloud.storage.query.KiiQueryResult;
 public class MainActivity extends Activity {
 
 	private static final int SELECT_PHOTO = 100;
-	
+
 	private static final String TAG = "MainActivity";
 
 	// define some strings used for creating objects
 	private static final String BUCKET_NAME = "imageBucket";
-	
-	// define the UI elements
-    private ProgressDialog mProgress;
-    
-    // define the list
-    private ListView mListView;
-    
-    // define the list manager
-	private ObjectAdapter mListAdapter;
-	
-	// define the object count
-	// used to easily see object names incrementing
-    private int mObjectCount = 0;
 
-    // define a custom list adapter to handle KiiObjects
+	// define the UI elements
+	private ProgressDialog mProgress;
+
+	// define the list
+	private ListView mListView;
+
+	// define the list manager
+	private ObjectAdapter mListAdapter;
+
+	// define a custom list adapter to handle KiiObjects
 	public class ObjectAdapter extends ArrayAdapter<KiiObject> {
 
 		// define some vars
 		int resource;
-	    String response;
-	    Context context;
-	    
-	    // initialize the adapter
-	    public ObjectAdapter(Context context, int resource, List<KiiObject> items) {
-	        super(context, resource, items);
-	        
-	        // save the resource for later
-	        this.resource = resource;
-	    }
-	 
-	    @Override
-	    public View getView(int position, View convertView, ViewGroup parent) {
-	    	
-	    	// create the view
-	        LinearLayout rowView;
-	        
-	        // get a reference to the object
-	        KiiObject obj = getItem(position);
-	 
-	        // if it's not already created
-	        if(convertView == null) {
-	        	
-	        	// create the view by inflating the xml resource (res/layout/row.xml)
-	        	rowView = new LinearLayout(getContext());
-	            String inflater = Context.LAYOUT_INFLATER_SERVICE;
-	            LayoutInflater vi;
-	            vi = (LayoutInflater)getContext().getSystemService(inflater);
-	            vi.inflate(resource, rowView, true);
-	            
-	        } 
-	        
-	        // it's already created, reuse it
-	        else {
-	        	rowView = (LinearLayout) convertView;
-	        }
-	        
-	        // get the text fields for the row
-	        TextView titleText = (TextView) rowView.findViewById(R.id.title);
-	        
-	        // set the content of the row texts
-	        titleText.setText(obj.getString("imageName"));
-	        
-	        //set the image
-	        ImageView image = (ImageView) rowView.findViewById(R.id.list_image);
-	        
-	        byte[] bmpBytes = obj.getByteArray("image");
-	        Bitmap bmp = BitmapFactory.decodeByteArray(bmpBytes, 0, bmpBytes.length);
-	        image.setImageBitmap(bmp);
-	        // return the row view
-	        return rowView;
-	    }
-	 
+		String response;
+		Context context;
+
+		// initialize the adapter
+		public ObjectAdapter(Context context, int resource,
+				List<KiiObject> items) {
+			super(context, resource, items);
+
+			// save the resource for later
+			this.resource = resource;
+		}
+
+		@Override
+		/**
+		 * List row layout
+		 */
+		public View getView(int position, View convertView, ViewGroup parent) {
+
+			// create the view
+			LinearLayout rowView;
+
+			// get a reference to the object
+			KiiObject obj = getItem(position);
+
+			// if it's not already created
+			if (convertView == null) {
+
+				// create the view by inflating the xml resource
+				// (res/layout/row.xml)
+				rowView = new LinearLayout(getContext());
+				String inflater = Context.LAYOUT_INFLATER_SERVICE;
+				LayoutInflater vi;
+				vi = (LayoutInflater) getContext().getSystemService(inflater);
+				vi.inflate(resource, rowView, true);
+
+			}
+
+			// it's already created, reuse it
+			else {
+				rowView = (LinearLayout) convertView;
+			}
+
+			// get the text fields for the row
+			TextView titleText = (TextView) rowView.findViewById(R.id.title);
+
+			// set the content of the row texts
+			titleText.setText(obj.getString("imageName"));
+
+			// set the image
+			ImageView image = (ImageView) rowView.findViewById(R.id.list_image);
+
+			byte[] bmpBytes = obj.getByteArray("image");
+			Bitmap bmp = BitmapFactory.decodeByteArray(bmpBytes, 0,
+					bmpBytes.length);
+			image.setImageBitmap(bmp);
+			// return the row view
+			return rowView;
+		}
+
 	}
+
 	
-	// the user can add items from the options menu. 
-	// create that menu here - from the res/menu/menu.xml file
+	/**
+	 * the user can add items from the options menu.
+	 * create that menu here - from the res/menu/menu.xml file
+	 */
 	public boolean onCreateOptionsMenu(Menu menu) {
 		super.onCreateOptionsMenu(menu);
 		MenuInflater inflater = getMenuInflater();
 		inflater.inflate(R.menu.menu, menu);
 		return true;
 	}
-	
-	public boolean onOptionsItemSelected(MenuItem item)  {
+
+	/**
+	 * Call addItem from the otions menu
+	 */
+	public boolean onOptionsItemSelected(MenuItem item) {
 		MainActivity.this.addItem(null);
 		return true;
 	}
 
-	
-	
-	//resize the image to fit in Kii object
+	// resize the image to fit in Kii object
 	private Bitmap decodeUri(Uri selectedImage) throws FileNotFoundException {
 
-        // Decode image size
-        BitmapFactory.Options o = new BitmapFactory.Options();
-        o.inJustDecodeBounds = true;
-        BitmapFactory.decodeStream(getContentResolver().openInputStream(selectedImage), null, o);
+		// Decode image size
+		BitmapFactory.Options o = new BitmapFactory.Options();
+		o.inJustDecodeBounds = true;
+		BitmapFactory.decodeStream(
+				getContentResolver().openInputStream(selectedImage), null, o);
 
-        // The new size we want to scale to
-        final int REQUIRED_SIZE = 100;
+		// We can return the result of decodeStream function above. However, it
+		// may be worth scaling the images so that they are not bigger than certain 
+		// size. This ensures that the image fits on the screen and is small enough
+		// to be saved in Kii cloud object
+		final int REQUIRED_SIZE = 100;
 
-        // Find the correct scale value. It should be the power of 2.
-        int width_tmp = o.outWidth, height_tmp = o.outHeight;
-        int scale = 1;
-        while (true) {
-            if (width_tmp / 2 < REQUIRED_SIZE
-               && height_tmp / 2 < REQUIRED_SIZE) {
-                break;
-            }
-            width_tmp /= 2;
-            height_tmp /= 2;
-            scale *= 2;
-        }
+		// Find the correct scale value. It should be the power of 2.
+		int width_tmp = o.outWidth, height_tmp = o.outHeight;
+		int scale = 1;
+		while (true) {
+			if (width_tmp / 2 < REQUIRED_SIZE && height_tmp / 2 < REQUIRED_SIZE) {
+				break;
+			}
+			width_tmp /= 2;
+			height_tmp /= 2;
+			scale *= 2;
+		}
 
-        // Decode with inSampleSize
-        BitmapFactory.Options o2 = new BitmapFactory.Options();
-        o2.inSampleSize = scale;
-        return BitmapFactory.decodeStream(getContentResolver().openInputStream(selectedImage), null, o2);
+		// Decode with inSampleSize, which is the scaling value 
+		BitmapFactory.Options o2 = new BitmapFactory.Options();
+		o2.inSampleSize = scale;
+		return BitmapFactory.decodeStream(
+				getContentResolver().openInputStream(selectedImage), null, o2);
 
-    }
-	
+	}
+
 	@Override
-	protected void onActivityResult(int requestCode, int resultCode, Intent imageReturnedIntent) { 
-	    super.onActivityResult(requestCode, resultCode, imageReturnedIntent); 
+	/**
+	 * image selection is done
+	 */
+	protected void onActivityResult(int requestCode, int resultCode,
+			Intent imageReturnedIntent) {
+		super.onActivityResult(requestCode, resultCode, imageReturnedIntent);
 
-	    switch(requestCode) { 
-	    case SELECT_PHOTO:
-	        if(resultCode == RESULT_OK){  
-	            Uri selectedImage = imageReturnedIntent.getData();
-	            String imageName = selectedImage.getPath();
-	            InputStream imageStream;
+		switch (requestCode) {
+		case SELECT_PHOTO:
+			if (resultCode == RESULT_OK) {
+				Uri selectedImage = imageReturnedIntent.getData();
+				String imageName = selectedImage.getPath();
 				try {
 					Bitmap yourSelectedImage = decodeUri(selectedImage);
-					//Toast.makeText(MainActivity.this, "Bitmap size: " + yourSelectedImage.getHeight(), Toast.LENGTH_SHORT).show();
 					createObject(yourSelectedImage, imageName);
 				} catch (FileNotFoundException e) {
 					Log.v(TAG, "Error registering: " + e.getLocalizedMessage());
-        			Toast.makeText(MainActivity.this, "Error selecting an image: " + e.getLocalizedMessage(), Toast.LENGTH_SHORT).show();
+					Toast.makeText(
+							MainActivity.this,
+							"Error selecting an image: "
+									+ e.getLocalizedMessage(),
+							Toast.LENGTH_SHORT).show();
 				}
-	        }
-	    }
+			}
+		}
 	}
-	
-//	protected void onActivityResult(int requestCode, int resultCode, Intent imageReturnedIntent) { 
-//		super.onActivityResult(requestCode, resultCode, imageReturnedIntent); 
-//
-//		switch(requestCode) { 
-//		case SELECT_PHOTO:
-//			if(resultCode == RESULT_OK){  
-//				Uri selectedImage = imageReturnedIntent.getData();
-//				String[] filePathColumn = {MediaStore.Images.Media.DATA};
-//
-//				Cursor cursor = getContentResolver().query(selectedImage, filePathColumn, null, null, null);
-//				cursor.moveToFirst();
-//
-//				int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
-//				String filePath = cursor.getString(columnIndex);
-//				cursor.close();
-//
-//
-//				Bitmap yourSelectedImage = BitmapFactory.decodeFile(filePath);
-//			}
-//		}
-		
-	// the user has chosen to create an object from the options menu.
-	// perform that action here...
+
+	/**
+	 * "Add Item" button was clicked on the front end
+	 * 
+	 * @param v
+	 *            - owner view
+	 */
 	public void addItem(View v) {
 		// First select an image
 		Intent photoPickerIntent = new Intent(Intent.ACTION_PICK);
 		photoPickerIntent.setType("image/*");
-		startActivityForResult(photoPickerIntent, SELECT_PHOTO);   
+		startActivityForResult(photoPickerIntent, SELECT_PHOTO);
 	}
-	
-	private void createObject(Bitmap image, String imageName){
+
+	/**
+	 * 
+	 * @param image
+	 *            - Bitmap object containing selected image
+	 * @param imageName
+	 *            - image name to help identify the image
+	 */
+	private void createObject(Bitmap image, String imageName) {
 		// show a progress dialog to the user
-		mProgress = ProgressDialog.show(MainActivity.this, "", "Creating Object...", true);
-		
-		//convert image to byte array
+		mProgress = ProgressDialog.show(MainActivity.this, "",
+				"Creating Object...", true);
+
+		// convert image to byte array
 		ByteArrayOutputStream stream = new ByteArrayOutputStream();
+		// compress to lossless PNG format
 		image.compress(Bitmap.CompressFormat.PNG, 100, stream);
 		byte[] byteArray = stream.toByteArray();
-		
-		// create an incremented title for the object
-		String value = imageName;
-		
+
 		// get a reference to a KiiBucket
 		KiiBucket bucket = KiiUser.getCurrentUser().bucket(BUCKET_NAME);
-		
-		// create a new KiiObject and set a key/value
+
+		// create a new KiiObject and set image and imageName keys
 		KiiObject obj = bucket.object();
-		obj.set("imageName", value);
+		obj.set("imageName", imageName);
 		obj.set("image", byteArray);
-		
+
 		// save the object asynchronously
 		obj.save(new KiiObjectCallBack() {
-			
-    		// catch the callback's "done" request
+
+			// catch the callback's "done" request
 			public void onSaveCompleted(int token, KiiObject o, Exception e) {
-				
-    			// hide our progress UI element
+
+				// hide our progress UI element
 				mProgress.dismiss();
 
-        		// check for an exception (successful request if e==null)
-        		if(e == null) {
+				// check for an exception (successful request if e==null)
+				if (e == null) {
 
-        			// tell the console and the user it was a success!
-        			Toast.makeText(MainActivity.this, "Created object", Toast.LENGTH_SHORT).show();
-        			Log.d(TAG, "Created object: " + o.toString());
-        			
-        			// insert this object into the beginning of the list adapter
-        			MainActivity.this.mListAdapter.insert(o, 0);
-        			
-				} 
-        		
-        		// otherwise, something bad happened in the request
-        		else {
-        			
-        			// tell the console and the user there was a failure
-        			Toast.makeText(MainActivity.this, "Error creating object", Toast.LENGTH_SHORT).show();
-        			Log.d(TAG, "Error creating object: " + e.getLocalizedMessage());
+					// tell the console and the user it was a success!
+					Toast.makeText(MainActivity.this, "Created object",
+							Toast.LENGTH_SHORT).show();
+					Log.d(TAG, "Created object: " + o.toString());
+
+					// insert this object into the beginning of the list adapter
+					MainActivity.this.mListAdapter.insert(o, 0);
+
 				}
-				
+
+				// otherwise, something bad happened in the request
+				else {
+
+					// tell the console and the user there was a failure
+					Toast.makeText(MainActivity.this, "Error creating object",
+							Toast.LENGTH_SHORT).show();
+					Log.d(TAG,
+							"Error creating object: " + e.getLocalizedMessage());
+				}
+
 			}
 		});
 
 	}
-	// load any existing objects associated with this user from the server.
-	// this is done on view creation
+
+	/**
+	 * Load all existing objects associated with this user from the server. This
+	 * is done on view creation
+	 */
 	private void loadObjects() {
-		
+
 		// default to an empty adapter
 		mListAdapter.clear();
-		
+
 		// show a progress dialog to the user
-    	mProgress = ProgressDialog.show(MainActivity.this, "", "Loading...", true);
+		mProgress = ProgressDialog.show(MainActivity.this, "", "Loading...",
+				true);
 
-    	// create an empty KiiQuery (will retrieve all results, sorted by creation date)
-        KiiQuery query = new KiiQuery(null);
-        query.sortByAsc("_created");
+		// create an empty KiiQuery (will retrieve all results, sorted by
+		// creation date)
+		KiiQuery query = new KiiQuery(null);
+		query.sortByAsc("_created");
 
-        // define the bucket to query
-        KiiBucket bucket = KiiUser.getCurrentUser().bucket(BUCKET_NAME);
-        
-        // perform the query
-        bucket.query(new KiiQueryCallBack<KiiObject>() {
+		// define the bucket to query
+		KiiBucket bucket = KiiUser.getCurrentUser().bucket(BUCKET_NAME);
 
-    		// catch the callback's "done" request
-        	public void onQueryCompleted(int token, KiiQueryResult<KiiObject> result, Exception e) {
-				
-    			// hide our progress UI element
+		// perform the query
+		bucket.query(new KiiQueryCallBack<KiiObject>() {
+
+			// catch the callback's "done" feedback
+			public void onQueryCompleted(int token,
+					KiiQueryResult<KiiObject> result, Exception e) {
+
+				// hide our progress UI element
 				mProgress.dismiss();
 
-        		// check for an exception (successful request if e==null)
-        		if(e == null) {
+				// check for an exception (successful request if e==null)
+				if (e == null) {
 
-        			// add the objects to the adapter (adding to the listview)
+					// add the objects to the adapter (adding to the listview)
 					List<KiiObject> objLists = result.getResult();
-			        for (KiiObject obj : objLists) {
-			        	mListAdapter.add(obj);
-			        }
+					for (KiiObject obj : objLists) {
+						mListAdapter.add(obj);
+					}
 
-        			// tell the console and the user it was a success!
-			        Log.v(TAG, "Objects loaded: " + result.getResult().toString());
-        			Toast.makeText(MainActivity.this, "Objects loaded", Toast.LENGTH_SHORT).show();
+					// tell the console and the user it was a success!
+					Log.v(TAG, "Objects loaded: "
+							+ result.getResult().toString());
+					Toast.makeText(MainActivity.this, "Objects loaded",
+							Toast.LENGTH_SHORT).show();
 
-				} 
-        		
-        		// otherwise, something bad happened in the request
-        		else {
+				}
 
-        			// tell the console and the user there was a failure
-        			Log.v(TAG, "Error loading objects: " + e.getLocalizedMessage());
-        			Toast.makeText(MainActivity.this, "Error loading objects: " + e.getLocalizedMessage(), Toast.LENGTH_SHORT).show();
+				// otherwise, something bad happened in the request
+				else {
+
+					// tell the console and the user there was a failure
+					Log.v(TAG,
+							"Error loading objects: " + e.getLocalizedMessage());
+					Toast.makeText(
+							MainActivity.this,
+							"Error loading objects: " + e.getLocalizedMessage(),
+							Toast.LENGTH_SHORT).show();
 				}
 			}
 		}, query);
 
-		
 	}
-	
-	// the user has chosen to delete an object
-	// perform that action here...
-	void performDelete(int position) { 
-		
+
+	/**
+	 * Delete button was pressed on the front-end
+	 * 
+	 * @param position
+	 *            - object position in the list
+	 */
+	void performDelete(int position) {
+
 		// show a progress dialog to the user
-    	mProgress = ProgressDialog.show(MainActivity.this, "", "Deleting object...", true);
+		mProgress = ProgressDialog.show(MainActivity.this, "",
+				"Deleting object...", true);
 
-    	// get the object to delete based on the index of the row that was tapped
+		// get the object to delete based on the position of the row in the list
 		final KiiObject o = MainActivity.this.mListAdapter.getItem(position);
-		
+
 		// delete the object asynchronously
-        o.delete(new KiiObjectCallBack() {
-        	
-    		// catch the callback's "done" request
-        	public void onDeleteCompleted(int token, Exception e) {
-				
-    			// hide our progress UI element
+		o.delete(new KiiObjectCallBack() {
+
+			// catch the callback's "done" request
+			public void onDeleteCompleted(int token, Exception e) {
+
+				// hide our progress UI element
 				mProgress.dismiss();
-				
-        		// check for an exception (successful request if e==null)
-				if(e == null) {
 
-        			// tell the console and the user it was a success!
-					Toast.makeText(MainActivity.this, "Deleted object", Toast.LENGTH_SHORT).show();
-        			Log.d(TAG, "Deleted object: " + o.toString());
-        			
-        			// remove the object from the list adapter
-        			MainActivity.this.mListAdapter.remove(o);
-        			
-				} 
-				
-        		// otherwise, something bad happened in the request
-        		else {
+				// check for an exception (successful request if e==null)
+				if (e == null) {
 
-        			// tell the console and the user there was a failure
-        			Toast.makeText(MainActivity.this, "Error deleting object", Toast.LENGTH_SHORT).show();
-        			Log.d(TAG, "Error deleting object: " + e.getLocalizedMessage());
+					// tell the console and the user it was a success!
+					Toast.makeText(MainActivity.this, "Deleted object",
+							Toast.LENGTH_SHORT).show();
+					Log.d(TAG, "Deleted object: " + o.toString());
+
+					// remove the object from the list adapter
+					MainActivity.this.mListAdapter.remove(o);
+
 				}
-				
-        	}
-        });
+
+				// otherwise, something bad happened in the request
+				else {
+
+					// tell the console and the user there was a failure
+					Toast.makeText(MainActivity.this, "Error deleting object",
+							Toast.LENGTH_SHORT).show();
+					Log.d(TAG,
+							"Error deleting object: " + e.getLocalizedMessage());
+				}
+
+			}
+		});
 	}
+
 	
-	
-	// Called when the user selects an image to delete
+	/**
+	 * Called when the user clicks "Delete" button on a selected image row
+	 * @param v - owner view
+	 */
 	public void deleteImage(View v) {
-	   
-	    final int position = MainActivity.this.mListView.getPositionForView((View) v.getParent());
-	    
+
+		// identify row in the list
+		final int position = MainActivity.this.mListView
+				.getPositionForView((View) v.getParent());
+
 		// build the alert
 		AlertDialog.Builder builder = new AlertDialog.Builder(this);
-		builder.setMessage("Would you like to remove this item? " )
+		builder.setMessage("Would you like to remove this item? ")
 				.setCancelable(true)
-				.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+				.setPositiveButton("Yes",
+						new DialogInterface.OnClickListener() {
 
-					// if the user chooses 'yes', 
-					public void onClick(DialogInterface dialog, int id) {
-						
-						// perform the delete action on the tapped object
-						MainActivity.this.performDelete(position);
-					}
-				})
+							// if the user chooses 'yes',
+							public void onClick(DialogInterface dialog, int id) {
+
+								// perform the delete action on the selected image
+								MainActivity.this.performDelete(position);
+							}
+						})
 				.setNegativeButton("No", new DialogInterface.OnClickListener() {
-					
+
 					// if the user chooses 'no'
 					public void onClick(DialogInterface dialog, int id) {
-						
+
 						// simply dismiss the dialog
 						dialog.cancel();
 					}
 				});
-		
+
 		// show the dialog
 		builder.create().show();
-		
+
 	}
 
-	
 	@Override
+	/**
+	 * Screen initialization
+	 */
 	public void onCreate(Bundle savedInstanceState) {
-		
+
 		super.onCreate(savedInstanceState);
-				
+
 		// set our view to the xml in res/layout/main.xml
 		setContentView(R.layout.main);
-					
-		// create an empty object adapter
-		mListAdapter = new ObjectAdapter(this, R.layout.row, new ArrayList<KiiObject>());	
-		
+
+		// create an empty list adapter
+		mListAdapter = new ObjectAdapter(this, R.layout.row,
+				new ArrayList<KiiObject>());
+
 		mListView = (ListView) this.findViewById(R.id.list);
-		
+
 		// set it to our view's list
-		mListView.setAdapter(mListAdapter);  
-	
+		mListView.setAdapter(mListAdapter);
+
 		// query for any previously-created objects
 		this.loadObjects();
 
 	}
-	
+
 }

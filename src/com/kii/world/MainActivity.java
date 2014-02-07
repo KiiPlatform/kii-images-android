@@ -22,6 +22,7 @@ package com.kii.world;
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import android.app.Activity;
@@ -123,9 +124,10 @@ public class MainActivity extends Activity {
 
 			// get the text fields for the row
 			TextView titleText = (TextView) rowView.findViewById(R.id.title);
-
-			// set the content of the row texts
 			titleText.setText(obj.getString("imageName"));
+			
+			TextView titleCreated = (TextView) rowView.findViewById(R.id.dateCreated);
+			titleCreated.setText(new Date(obj.getCreatedTime()).toString());
 
 			// set the image
 			ImageView image = (ImageView) rowView.findViewById(R.id.list_image);

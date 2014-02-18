@@ -20,21 +20,27 @@
 package com.kii.world;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.StrictMode;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -49,14 +55,14 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.kii.cloud.storage.KiiBucket;
-import com.kii.cloud.storage.KiiObject;
-import com.kii.cloud.storage.KiiUser;
-import com.kii.cloud.storage.callback.KiiObjectCallBack;
+import com.kii.cloud.storage.Kii;
+import com.kii.cloud.storage.KiiFile;
+import com.kii.cloud.storage.KiiFileBucket;
 import com.kii.cloud.storage.callback.KiiQueryCallBack;
 import com.kii.cloud.storage.query.KiiQuery;
 import com.kii.cloud.storage.query.KiiQueryResult;
 
+@TargetApi(Build.VERSION_CODES.GINGERBREAD)
 public class MainActivity extends Activity {
 
 	private static final int SELECT_PHOTO = 100;
@@ -64,7 +70,7 @@ public class MainActivity extends Activity {
 	private static final String TAG = "MainActivity";
 
 	// define some strings used for creating objects
-	private static final String BUCKET_NAME = "imageBucket";
+	private static final String BUCKET_NAME = "MyBucket";
 
 	// define the UI elements
 	private ProgressDialog mProgress;
@@ -76,7 +82,7 @@ public class MainActivity extends Activity {
 	private ObjectAdapter mListAdapter;
 
 	// define a custom list adapter to handle KiiObjects
-	public class ObjectAdapter extends ArrayAdapter<KiiObject> {
+	public class ObjectAdapter extends ArrayAdapter<KiiFile> {
 
 		// define some vars
 		int resource;
@@ -84,8 +90,7 @@ public class MainActivity extends Activity {
 		Context context;
 
 		// initialize the adapter
-		public ObjectAdapter(Context context, int resource,
-				List<KiiObject> items) {
+		public ObjectAdapter(Context context, int resource, List<KiiFile> items) {
 			super(context, resource, items);
 
 			// save the resource for later
@@ -102,7 +107,7 @@ public class MainActivity extends Activity {
 			LinearLayout rowView;
 
 			// get a reference to the object
-			KiiObject obj = getItem(position);
+			KiiFile kiiFile = getItem(position);
 
 			// if it's not already created
 			if (convertView == null) {
@@ -124,15 +129,16 @@ public class MainActivity extends Activity {
 
 			// get the text fields for the row
 			TextView titleText = (TextView) rowView.findViewById(R.id.title);
-			titleText.setText(obj.getString("imageName"));
-			
-			TextView titleCreated = (TextView) rowView.findViewById(R.id.dateCreated);
-			titleCreated.setText(new Date(obj.getCreatedTime()).toString());
+			titleText.setText(kiiFile.getTitle());
 
-			// set the image
+			TextView titleCreated = (TextView) rowView
+					.findViewById(R.id.dateCreated);
+			titleCreated.setText(new Date(kiiFile.getCreatedTime()).toString());
+
+			// show thumbnail instead of the full image in the list view
 			ImageView image = (ImageView) rowView.findViewById(R.id.list_image);
 
-			byte[] bmpBytes = obj.getByteArray("image");
+			byte[] bmpBytes = kiiFile.getThumbnail();
 			Bitmap bmp = BitmapFactory.decodeByteArray(bmpBytes, 0,
 					bmpBytes.length);
 			image.setImageBitmap(bmp);
@@ -142,10 +148,9 @@ public class MainActivity extends Activity {
 
 	}
 
-	
 	/**
-	 * the user can add items from the options menu.
-	 * create that menu here - from the res/menu/menu.xml file
+	 * the user can add items from the options menu. create that menu here -
+	 * from the res/menu/menu.xml file
 	 */
 	public boolean onCreateOptionsMenu(Menu menu) {
 		super.onCreateOptionsMenu(menu);
@@ -155,14 +160,14 @@ public class MainActivity extends Activity {
 	}
 
 	/**
-	 * Call addItem from the otions menu
+	 * Call addItem from the options menu
 	 */
 	public boolean onOptionsItemSelected(MenuItem item) {
 		MainActivity.this.addItem(null);
 		return true;
 	}
 
-	// resize the image to fit in Kii object
+	// resize the image for thumbnail
 	private Bitmap decodeUri(Uri selectedImage) throws FileNotFoundException {
 
 		// Decode image size
@@ -171,10 +176,7 @@ public class MainActivity extends Activity {
 		BitmapFactory.decodeStream(
 				getContentResolver().openInputStream(selectedImage), null, o);
 
-		// We can return the result of decodeStream function above. However, it
-		// may be worth scaling the images so that they are not bigger than certain 
-		// size. This ensures that the image fits on the screen and is small enough
-		// to be saved in Kii cloud object
+		// Set thumbnail size
 		final int REQUIRED_SIZE = 100;
 
 		// Find the correct scale value. It should be the power of 2.
@@ -189,12 +191,35 @@ public class MainActivity extends Activity {
 			scale *= 2;
 		}
 
-		// Decode with inSampleSize, which is the scaling value 
+		// Decode with inSampleSize, which is the scaling value
 		BitmapFactory.Options o2 = new BitmapFactory.Options();
 		o2.inSampleSize = scale;
 		return BitmapFactory.decodeStream(
 				getContentResolver().openInputStream(selectedImage), null, o2);
 
+	}
+
+	/**
+	 * helper to retrieve the path of an image URI
+	 */
+	public String getPath(Uri uri) {
+		// just some safety built in
+		if (uri == null) {
+			// TODO perform some logging or show user feedback
+			return null;
+		}
+		// try to retrieve the image from the media store first
+		// this will only work for images selected from gallery
+		String[] filePathColumn = { MediaStore.Images.Media.DATA };
+
+		Cursor cursor = getContentResolver().query(uri, filePathColumn, null,
+				null, null);
+		cursor.moveToFirst();
+
+		int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
+		String filePath = cursor.getString(columnIndex);
+		cursor.close();
+		return filePath;
 	}
 
 	@Override
@@ -209,10 +234,20 @@ public class MainActivity extends Activity {
 		case SELECT_PHOTO:
 			if (resultCode == RESULT_OK) {
 				Uri selectedImage = imageReturnedIntent.getData();
-				String imageName = selectedImage.getPath();
+				// Get reference to the local file
+				String selectedImagePath = getPath(selectedImage);
+				File imageFile = new File(selectedImagePath);
+				String imageName = selectedImagePath
+						.substring(selectedImagePath.lastIndexOf("/") + 1);
 				try {
-					Bitmap yourSelectedImage = decodeUri(selectedImage);
-					createObject(yourSelectedImage, imageName);
+					// Create thumbnail
+					Bitmap thumbnail = decodeUri(selectedImage);
+					ByteArrayOutputStream stream = new ByteArrayOutputStream();
+					// compress to lossless PNG format with 100% quality
+					thumbnail.compress(Bitmap.CompressFormat.PNG, 100, stream);
+					byte[] byteArray = stream.toByteArray();
+					
+					createObject(imageFile, imageName, byteArray);
 				} catch (FileNotFoundException e) {
 					Log.v(TAG, "Error registering: " + e.getLocalizedMessage());
 					Toast.makeText(
@@ -240,65 +275,47 @@ public class MainActivity extends Activity {
 
 	/**
 	 * 
-	 * @param image
-	 *            - Bitmap object containing selected image
+	 * @param imageFile
+	 *            - Local image file
 	 * @param imageName
 	 *            - image name to help identify the image
+	 * @param thumbnail
+	 *            - Bitmap object containing image's thumbnail
 	 */
-	private void createObject(Bitmap image, String imageName) {
+	private void createObject(File imageFile, String imageName, byte[] thumbnail) {
 		// show a progress dialog to the user
 		mProgress = ProgressDialog.show(MainActivity.this, "",
 				"Creating Object...", true);
 
-		// convert image to byte array
-		ByteArrayOutputStream stream = new ByteArrayOutputStream();
-		// compress to lossless PNG format
-		image.compress(Bitmap.CompressFormat.PNG, 100, stream);
-		byte[] byteArray = stream.toByteArray();
+		// Upload the file.
+		// You can also use suspendable transfer - for more information, use
+		// this documentation
+		// http://docs.kii.com/en/guides/android/managing-data/file-storages/uploading/
+		KiiFile kiiFile = null;
+		try {
+			kiiFile = Kii.fileBucket(BUCKET_NAME).file(imageFile);
 
-		// get a reference to a KiiBucket
-		KiiBucket bucket = KiiUser.getCurrentUser().bucket(BUCKET_NAME);
+			kiiFile.setThumbnail(thumbnail);
+			kiiFile.setTitle(imageName);
+			
+			kiiFile.save();
+		} catch (Exception e) {
+			Toast.makeText(MainActivity.this, "Error uploading file",
+					Toast.LENGTH_SHORT).show();
+			Log.d(TAG, "Error uploading file: " + e.getLocalizedMessage());
+			mProgress.dismiss();
+			return;
+		}
 
-		// create a new KiiObject and set image and imageName keys
-		KiiObject obj = bucket.object();
-		obj.set("imageName", imageName);
-		obj.set("image", byteArray);
+		// tell the console and the user it was a success!
+		Toast.makeText(MainActivity.this, "Image file saved",
+				Toast.LENGTH_SHORT).show();
+		Log.d(TAG, "Image file saved: " + imageName);
 
-		// save the object asynchronously
-		obj.save(new KiiObjectCallBack() {
+		// insert this object into the beginning of the list adapter
+		MainActivity.this.mListAdapter.insert(kiiFile, 0);
 
-			// catch the callback's "done" request
-			public void onSaveCompleted(int token, KiiObject o, Exception e) {
-
-				// hide our progress UI element
-				mProgress.dismiss();
-
-				// check for an exception (successful request if e==null)
-				if (e == null) {
-
-					// tell the console and the user it was a success!
-					Toast.makeText(MainActivity.this, "Created object",
-							Toast.LENGTH_SHORT).show();
-					Log.d(TAG, "Created object: " + o.toString());
-
-					// insert this object into the beginning of the list adapter
-					MainActivity.this.mListAdapter.insert(o, 0);
-
-				}
-
-				// otherwise, something bad happened in the request
-				else {
-
-					// tell the console and the user there was a failure
-					Toast.makeText(MainActivity.this, "Error creating object",
-							Toast.LENGTH_SHORT).show();
-					Log.d(TAG,
-							"Error creating object: " + e.getLocalizedMessage());
-				}
-
-			}
-		});
-
+		mProgress.dismiss();
 	}
 
 	/**
@@ -314,20 +331,18 @@ public class MainActivity extends Activity {
 		mProgress = ProgressDialog.show(MainActivity.this, "", "Loading...",
 				true);
 
-		// create an empty KiiQuery (will retrieve all results, sorted by
-		// creation date)
-		KiiQuery query = new KiiQuery(null);
-		query.sortByAsc("_created");
-
+		// create an empty KiiQuery (will retrieve all results)
+		KiiQuery query = new KiiQuery();
+		
 		// define the bucket to query
-		KiiBucket bucket = KiiUser.getCurrentUser().bucket(BUCKET_NAME);
+		KiiFileBucket bucket =Kii.fileBucket(BUCKET_NAME);
 
 		// perform the query
-		bucket.query(new KiiQueryCallBack<KiiObject>() {
+		bucket.query(new KiiQueryCallBack<KiiFile>() {
 
 			// catch the callback's "done" feedback
 			public void onQueryCompleted(int token,
-					KiiQueryResult<KiiObject> result, Exception e) {
+					KiiQueryResult<KiiFile> result, Exception e) {
 
 				// hide our progress UI element
 				mProgress.dismiss();
@@ -336,15 +351,15 @@ public class MainActivity extends Activity {
 				if (e == null) {
 
 					// add the objects to the adapter (adding to the listview)
-					List<KiiObject> objLists = result.getResult();
-					for (KiiObject obj : objLists) {
-						mListAdapter.add(obj);
+					List<KiiFile> fileLists = result.getResult();
+					for (KiiFile kiiFile : fileLists) {
+						mListAdapter.add(kiiFile);
 					}
 
 					// tell the console and the user it was a success!
-					Log.v(TAG, "Objects loaded: "
-							+ result.getResult().toString());
-					Toast.makeText(MainActivity.this, "Objects loaded",
+					Log.v(TAG, "Images loaded: "
+							+ result.getResult().size());
+					Toast.makeText(MainActivity.this, "Images loaded",
 							Toast.LENGTH_SHORT).show();
 
 				}
@@ -361,7 +376,7 @@ public class MainActivity extends Activity {
 							Toast.LENGTH_SHORT).show();
 				}
 			}
-		}, query);
+		}, query, false);
 
 	}
 
@@ -378,48 +393,78 @@ public class MainActivity extends Activity {
 				"Deleting object...", true);
 
 		// get the object to delete based on the position of the row in the list
-		final KiiObject o = MainActivity.this.mListAdapter.getItem(position);
+		final KiiFile kiiFile = MainActivity.this.mListAdapter
+				.getItem(position);
 
-		// delete the object asynchronously
-		o.delete(new KiiObjectCallBack() {
+		// delete the image file permanently.
+		// Alternatively the image can be put into trash, which allows restoring
+		// it later:
+		// http://docs.kii.com/en/guides/android/managing-data/file-storages/deleting/
 
-			// catch the callback's "done" request
-			public void onDeleteCompleted(int token, Exception e) {
+		try {
+			kiiFile.delete();
+		} catch (Exception e) {
+			// tell the console and the user there was a failure
+			Toast.makeText(MainActivity.this, "Error deleting file",
+					Toast.LENGTH_SHORT).show();
+			Log.d(TAG, "Error deleting file: " + e.getLocalizedMessage());
+			mProgress.dismiss();
+			return;
+		}
 
-				// hide our progress UI element
-				mProgress.dismiss();
+		// tell the console and the user it was a success!
+		Toast.makeText(MainActivity.this, "Deleted file", Toast.LENGTH_SHORT)
+				.show();
+		Log.d(TAG, "Deleted file." );
 
-				// check for an exception (successful request if e==null)
-				if (e == null) {
-
-					// tell the console and the user it was a success!
-					Toast.makeText(MainActivity.this, "Deleted object",
-							Toast.LENGTH_SHORT).show();
-					Log.d(TAG, "Deleted object: " + o.toString());
-
-					// remove the object from the list adapter
-					MainActivity.this.mListAdapter.remove(o);
-
-				}
-
-				// otherwise, something bad happened in the request
-				else {
-
-					// tell the console and the user there was a failure
-					Toast.makeText(MainActivity.this, "Error deleting object",
-							Toast.LENGTH_SHORT).show();
-					Log.d(TAG,
-							"Error deleting object: " + e.getLocalizedMessage());
-				}
-
-			}
-		});
+		// remove the object from the list adapter
+		MainActivity.this.mListAdapter.remove(kiiFile);
+		mProgress.dismiss();
 	}
 
-	
+	/**
+	 * Called when the user clicks "Full Screen" button on a selected image row
+	 * 
+	 * @param v
+	 *            - owner view
+	 */
+	public void fullScreenImage(View v) {
+		// identify row in the list
+		final int position = MainActivity.this.mListView
+				.getPositionForView((View) v.getParent());
+
+		// get the file
+		final KiiFile kiiFile = MainActivity.this.mListAdapter
+				.getItem(position);
+		String newFileName = "";
+		try {
+			// Refresh the instance to get the metadata (if necessary)
+			kiiFile.refresh();
+			// Download File body if does not exist
+			newFileName = "/storage/sdcard/Pictures/" + kiiFile.getTitle();
+			File localFile = new File(newFileName);
+			if (!localFile.exists()) {
+				kiiFile.downloadFileBody(newFileName);
+			} 
+		} catch (Exception e) {
+			// tell the console and the user there was a failure
+			Toast.makeText(MainActivity.this, "Error loading file",
+					Toast.LENGTH_SHORT).show();
+			Log.d(TAG, "Error loading file: " + e.getLocalizedMessage());
+			return;
+		}
+		// go to the image screen
+		Intent myIntent = new Intent(MainActivity.this, ImageActivity.class);
+		myIntent.putExtra("filePath", newFileName);
+		MainActivity.this.startActivity(myIntent);
+
+	}
+
 	/**
 	 * Called when the user clicks "Delete" button on a selected image row
-	 * @param v - owner view
+	 * 
+	 * @param v
+	 *            - owner view
 	 */
 	public void deleteImage(View v) {
 
@@ -437,7 +482,8 @@ public class MainActivity extends Activity {
 							// if the user chooses 'yes',
 							public void onClick(DialogInterface dialog, int id) {
 
-								// perform the delete action on the selected image
+								// perform the delete action on the selected
+								// image
 								MainActivity.this.performDelete(position);
 							}
 						})
@@ -463,13 +509,16 @@ public class MainActivity extends Activity {
 	public void onCreate(Bundle savedInstanceState) {
 
 		super.onCreate(savedInstanceState);
+		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder()
+				.permitAll().build();
+		StrictMode.setThreadPolicy(policy);
 
 		// set our view to the xml in res/layout/main.xml
 		setContentView(R.layout.main);
 
 		// create an empty list adapter
 		mListAdapter = new ObjectAdapter(this, R.layout.row,
-				new ArrayList<KiiObject>());
+				new ArrayList<KiiFile>());
 
 		mListView = (ListView) this.findViewById(R.id.list);
 
@@ -478,7 +527,7 @@ public class MainActivity extends Activity {
 
 		// query for any previously-created objects
 		this.loadObjects();
-
+		
 	}
 
 }

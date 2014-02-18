@@ -55,5 +55,13 @@
         android:text="Delete Image" 
         android:onClick="deleteImage"
         android:layout_alignParentBottom="true" />
+   
+      <!-- Full image button -->
+   <Button android:layout_width="wrap_content"
+        android:layout_height="wrap_content" 
+        android:id="@+id/fullbutton"
+        android:text="Full Screen" 
+        android:onClick="fullScreenImage"
+        android:layout_alignParentBottom="true" />
  
 </LinearLayout>

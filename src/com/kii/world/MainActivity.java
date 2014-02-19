@@ -294,7 +294,7 @@ public class MainActivity extends Activity {
 		KiiFile kiiFile = null;
 		try {
 			kiiFile = Kii.fileBucket(BUCKET_NAME).file(imageFile);
-
+		
 			kiiFile.setThumbnail(thumbnail);
 			kiiFile.setTitle(imageName);
 			
@@ -306,12 +306,12 @@ public class MainActivity extends Activity {
 			mProgress.dismiss();
 			return;
 		}
-
+		
 		// tell the console and the user it was a success!
 		Toast.makeText(MainActivity.this, "Image file saved",
 				Toast.LENGTH_SHORT).show();
 		Log.d(TAG, "Image file saved: " + imageName);
-
+		
 		// insert this object into the beginning of the list adapter
 		MainActivity.this.mListAdapter.insert(kiiFile, 0);
 

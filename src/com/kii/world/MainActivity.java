@@ -40,7 +40,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.StrictMode;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -437,7 +436,7 @@ public class MainActivity extends Activity {
 		final int position = MainActivity.this.mListView
 				.getPositionForView((View) v.getParent());
 
-		// get the file
+		// get the image
 		final KiiObject kiiObject = MainActivity.this.mListAdapter
 				.getItem(position);
 		String newFileName = "";
@@ -535,9 +534,7 @@ public class MainActivity extends Activity {
 	public void onCreate(Bundle savedInstanceState) {
 
 		super.onCreate(savedInstanceState);
-		StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder()
-				.permitAll().build();
-		StrictMode.setThreadPolicy(policy);
+
 
 		// set our view to the xml in res/layout/main.xml
 		setContentView(R.layout.main);

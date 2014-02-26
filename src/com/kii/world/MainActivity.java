@@ -39,6 +39,7 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.StrictMode;
 import android.provider.MediaStore;
 import android.util.Log;
@@ -56,11 +57,14 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.kii.cloud.storage.Kii;
-import com.kii.cloud.storage.KiiFile;
-import com.kii.cloud.storage.KiiFileBucket;
+import com.kii.cloud.storage.KiiBucket;
+import com.kii.cloud.storage.KiiObject;
 import com.kii.cloud.storage.callback.KiiQueryCallBack;
 import com.kii.cloud.storage.query.KiiQuery;
 import com.kii.cloud.storage.query.KiiQueryResult;
+import com.kii.cloud.storage.resumabletransfer.InvalidHolderException;
+import com.kii.cloud.storage.resumabletransfer.KiiDownloader;
+import com.kii.cloud.storage.resumabletransfer.KiiUploader;
 
 @TargetApi(Build.VERSION_CODES.GINGERBREAD)
 public class MainActivity extends Activity {
@@ -70,7 +74,7 @@ public class MainActivity extends Activity {
 	private static final String TAG = "MainActivity";
 
 	// define some strings used for creating objects
-	private static final String BUCKET_NAME = "MyBucket";
+	private static final String BUCKET_NAME = "FileObjects";
 
 	// define the UI elements
 	private ProgressDialog mProgress;
@@ -82,7 +86,7 @@ public class MainActivity extends Activity {
 	private ObjectAdapter mListAdapter;
 
 	// define a custom list adapter to handle KiiObjects
-	public class ObjectAdapter extends ArrayAdapter<KiiFile> {
+	public class ObjectAdapter extends ArrayAdapter<KiiObject> {
 
 		// define some vars
 		int resource;
@@ -90,7 +94,7 @@ public class MainActivity extends Activity {
 		Context context;
 
 		// initialize the adapter
-		public ObjectAdapter(Context context, int resource, List<KiiFile> items) {
+		public ObjectAdapter(Context context, int resource, List<KiiObject> items) {
 			super(context, resource, items);
 
 			// save the resource for later
@@ -107,7 +111,7 @@ public class MainActivity extends Activity {
 			LinearLayout rowView;
 
 			// get a reference to the object
-			KiiFile kiiFile = getItem(position);
+			KiiObject kiiObject = getItem(position);
 
 			// if it's not already created
 			if (convertView == null) {
@@ -129,16 +133,16 @@ public class MainActivity extends Activity {
 
 			// get the text fields for the row
 			TextView titleText = (TextView) rowView.findViewById(R.id.title);
-			titleText.setText(kiiFile.getTitle());
+			titleText.setText(kiiObject.getString("imageName"));
 
 			TextView titleCreated = (TextView) rowView
 					.findViewById(R.id.dateCreated);
-			titleCreated.setText(new Date(kiiFile.getCreatedTime()).toString());
+			titleCreated.setText(new Date(kiiObject.getCreatedTime()).toString());
 
 			// show thumbnail instead of the full image in the list view
 			ImageView image = (ImageView) rowView.findViewById(R.id.list_image);
 
-			byte[] bmpBytes = kiiFile.getThumbnail();
+			byte[] bmpBytes = kiiObject.getByteArray("thumbnail");
 			Bitmap bmp = BitmapFactory.decodeByteArray(bmpBytes, 0,
 					bmpBytes.length);
 			image.setImageBitmap(bmp);
@@ -287,19 +291,19 @@ public class MainActivity extends Activity {
 		mProgress = ProgressDialog.show(MainActivity.this, "",
 				"Creating Object...", true);
 
+		// Create an object 
+		KiiObject object = Kii.bucket(BUCKET_NAME).object();
+
+		// Set key-value pairs.
+		object.set("imageName", imageName);
+		object.set("thumbnail", thumbnail);
 		// Upload the file.
-		// You can also use suspendable transfer - for more information, use
-		// this documentation
-		// http://docs.kii.com/en/guides/android/managing-data/file-storages/uploading/
-		KiiFile kiiFile = null;
+		KiiUploader uploader = object.uploader(getApplicationContext(), 
+		        imageFile);
 		try {
-			kiiFile = Kii.fileBucket(BUCKET_NAME).file(imageFile);
-		
-			kiiFile.setThumbnail(thumbnail);
-			kiiFile.setTitle(imageName);
-			
-			kiiFile.save();
+		  uploader.transfer(null);
 		} catch (Exception e) {
+		  // Can be different exceptions - see  http://documentation.kii.com/en/guides/android/managing-data/object-storages/uploading/
 			Toast.makeText(MainActivity.this, "Error uploading file",
 					Toast.LENGTH_SHORT).show();
 			Log.d(TAG, "Error uploading file: " + e.getLocalizedMessage());
@@ -313,13 +317,13 @@ public class MainActivity extends Activity {
 		Log.d(TAG, "Image file saved: " + imageName);
 		
 		// insert this object into the beginning of the list adapter
-		MainActivity.this.mListAdapter.insert(kiiFile, 0);
+		MainActivity.this.mListAdapter.insert(object, 0);
 
 		mProgress.dismiss();
 	}
 
 	/**
-	 * Load all existing objects associated with this user from the server. This
+	 * Load all existing objects in this bucket from the server. This
 	 * is done on view creation
 	 */
 	private void loadObjects() {
@@ -335,14 +339,14 @@ public class MainActivity extends Activity {
 		KiiQuery query = new KiiQuery();
 		
 		// define the bucket to query
-		KiiFileBucket bucket =Kii.fileBucket(BUCKET_NAME);
+		KiiBucket bucket =Kii.bucket(BUCKET_NAME);
 
 		// perform the query
-		bucket.query(new KiiQueryCallBack<KiiFile>() {
+		bucket.query(new KiiQueryCallBack<KiiObject>() {
 
 			// catch the callback's "done" feedback
 			public void onQueryCompleted(int token,
-					KiiQueryResult<KiiFile> result, Exception e) {
+					KiiQueryResult<KiiObject> result, Exception e) {
 
 				// hide our progress UI element
 				mProgress.dismiss();
@@ -351,9 +355,9 @@ public class MainActivity extends Activity {
 				if (e == null) {
 
 					// add the objects to the adapter (adding to the listview)
-					List<KiiFile> fileLists = result.getResult();
-					for (KiiFile kiiFile : fileLists) {
-						mListAdapter.add(kiiFile);
+					List<KiiObject> fileLists = result.getResult();
+					for (KiiObject kiiObject : fileLists) {
+						mListAdapter.add(kiiObject);
 					}
 
 					// tell the console and the user it was a success!
@@ -376,7 +380,7 @@ public class MainActivity extends Activity {
 							Toast.LENGTH_SHORT).show();
 				}
 			}
-		}, query, false);
+		}, query);
 
 	}
 
@@ -393,32 +397,32 @@ public class MainActivity extends Activity {
 				"Deleting object...", true);
 
 		// get the object to delete based on the position of the row in the list
-		final KiiFile kiiFile = MainActivity.this.mListAdapter
+		final KiiObject kiiObject = MainActivity.this.mListAdapter
 				.getItem(position);
 
-		// delete the image file permanently.
-		// Alternatively the image can be put into trash, which allows restoring
-		// it later:
-		// http://docs.kii.com/en/guides/android/managing-data/file-storages/deleting/
+		// delete the object including object body
+		// Alternatively, object body can be deleted using 
+		// kiiObject.deleteBody() - this will leave the object itself intact
+		//
 
 		try {
-			kiiFile.delete();
+			kiiObject.delete();
 		} catch (Exception e) {
 			// tell the console and the user there was a failure
-			Toast.makeText(MainActivity.this, "Error deleting file",
+			Toast.makeText(MainActivity.this, "Error deleting image",
 					Toast.LENGTH_SHORT).show();
-			Log.d(TAG, "Error deleting file: " + e.getLocalizedMessage());
+			Log.d(TAG, "Error deleting image: " + e.getLocalizedMessage());
 			mProgress.dismiss();
 			return;
 		}
 
 		// tell the console and the user it was a success!
-		Toast.makeText(MainActivity.this, "Deleted file", Toast.LENGTH_SHORT)
+		Toast.makeText(MainActivity.this, "Deleted image", Toast.LENGTH_SHORT)
 				.show();
-		Log.d(TAG, "Deleted file." );
+		Log.d(TAG, "Deleted image." );
 
 		// remove the object from the list adapter
-		MainActivity.this.mListAdapter.remove(kiiFile);
+		MainActivity.this.mListAdapter.remove(kiiObject);
 		mProgress.dismiss();
 	}
 
@@ -434,23 +438,45 @@ public class MainActivity extends Activity {
 				.getPositionForView((View) v.getParent());
 
 		// get the file
-		final KiiFile kiiFile = MainActivity.this.mListAdapter
+		final KiiObject kiiObject = MainActivity.this.mListAdapter
 				.getItem(position);
 		String newFileName = "";
 		try {
 			// Refresh the instance to get the metadata (if necessary)
-			kiiFile.refresh();
+			kiiObject.refresh();
 			// Download File body if does not exist
-			newFileName = "/storage/sdcard/Pictures/" + kiiFile.getTitle();
+			newFileName = "/storage/sdcard/Pictures/" + kiiObject.getString("imageName");
 			File localFile = new File(newFileName);
 			if (!localFile.exists()) {
-				kiiFile.downloadFileBody(newFileName);
+				// Create a KiiDownloader.
+				KiiDownloader downloader = null;
+				try {
+				  downloader = kiiObject.downloader(getApplicationContext(), new File(
+				        Environment.getExternalStorageDirectory(), newFileName));
+				} catch (InvalidHolderException e) {
+				    // Target Object has not been saved or is deleted.
+					Toast.makeText(MainActivity.this, "Error when trying to download file",
+							Toast.LENGTH_SHORT).show();
+					Log.d(TAG, "Error when trying to download file: " + e.getLocalizedMessage());
+					return;
+				}
+
+				// Start downloading.
+				try {
+				  downloader.transfer(null);
+				} catch (Exception e) { 
+					// different exceptions possible: http://documentation.kii.com/en/guides/android/managing-data/object-storages/downloading/
+					Toast.makeText(MainActivity.this, "Error downloading file",
+							Toast.LENGTH_SHORT).show();
+					Log.d(TAG, "Error downloading file: " + e.getLocalizedMessage());
+					return;
+				}
 			} 
 		} catch (Exception e) {
 			// tell the console and the user there was a failure
-			Toast.makeText(MainActivity.this, "Error loading file",
+			Toast.makeText(MainActivity.this, "Error downloading file",
 					Toast.LENGTH_SHORT).show();
-			Log.d(TAG, "Error loading file: " + e.getLocalizedMessage());
+			Log.d(TAG, "Error downloading file: " + e.getLocalizedMessage());
 			return;
 		}
 		// go to the image screen
@@ -518,7 +544,7 @@ public class MainActivity extends Activity {
 
 		// create an empty list adapter
 		mListAdapter = new ObjectAdapter(this, R.layout.row,
-				new ArrayList<KiiFile>());
+				new ArrayList<KiiObject>());
 
 		mListView = (ListView) this.findViewById(R.id.list);
 
